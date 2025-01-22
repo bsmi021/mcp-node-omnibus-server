@@ -530,10 +530,28 @@ ${features.includes('docker') ? '8. Docker configuration guidance' : ''}`
      * @param path Directory path to validate/create
      * @throws McpError if path is invalid or cannot be created
      */
+    // Enhanced error handling for path validation
     private async validatePath(path: string): Promise<void> {
         try {
-            await fs.mkdir(path, { recursive: true });
+            // Check if path exists
+            try {
+                await fs.access(path);
+            } catch {
+                // If path doesn't exist, create it
+                await fs.mkdir(path, { recursive: true });
+                return;
+            }
+
+            // If path exists, verify it's a directory
+            const stats = await fs.stat(path);
+            if (!stats.isDirectory()) {
+                throw new McpError(
+                    ErrorCode.InvalidParams,
+                    `Path ${path} exists but is not a directory`
+                );
+            }
         } catch (error) {
+            if (error instanceof McpError) throw error;
             throw new McpError(
                 ErrorCode.InvalidParams,
                 `Failed to validate/create path ${path}: ${error instanceof Error ? error.message : String(error)}`
@@ -553,36 +571,36 @@ ${features.includes('docker') ? '8. Docker configuration guidance' : ''}`
         }> = {
             react: {
                 command: typescript
-                    ? `npx create-react-app ${name} --template typescript`
-                    : `npx create-react-app ${name}`,
+                    ? `npx create-react-app ./ --template typescript`
+                    : `npx create-react-app ./`,
                 dependencies: ['react', 'react-dom'],
                 devDependencies: typescript
                     ? ['@types/react', '@types/react-dom', '@types/node']
                     : [],
             },
             next: {
-                command: `npx create-next-app@latest ${name} ${typescript ? '--typescript' : ''} --tailwind --eslint`,
+                command: `npx create-next-app@latest ./ ${typescript ? '--typescript' : ''} --tailwind --eslint`,
                 dependencies: ['next', 'react', 'react-dom'],
                 devDependencies: typescript
                     ? ['@types/node', '@types/react', '@types/react-dom']
                     : [],
             },
             express: {
-                command: `mkdir ${name} && cd ${name} && npm init -y`,
+                command: `npm init -y`,
                 dependencies: ['express', 'cors', 'dotenv'],
                 devDependencies: typescript
                     ? ['typescript', '@types/node', '@types/express', '@types/cors', 'ts-node', 'nodemon']
                     : ['nodemon'],
             },
             fastify: {
-                command: `mkdir ${name} && cd ${name} && npm init -y`,
+                command: `npm init -y`,
                 dependencies: ['fastify', '@fastify/cors', '@fastify/env'],
                 devDependencies: typescript
                     ? ['typescript', '@types/node', 'ts-node', 'nodemon']
                     : ['nodemon'],
             },
             node: {
-                command: `mkdir ${name} && cd ${name} && npm init -y`,
+                command: `npm init -y`,
                 dependencies: [],
                 devDependencies: typescript
                     ? ['typescript', '@types/node', 'ts-node', 'nodemon']
@@ -599,24 +617,29 @@ ${features.includes('docker') ? '8. Docker configuration guidance' : ''}`
     }
 
     private async handleCreateProject(args: CreateProjectArgs) {
-        await this.validatePath(args.path);
-        const typescript = args.typescript !== false; // Default to true if not specified
-        const template = this.getProjectTemplate(args.type, args.name, typescript);
-
         try {
-            // Create project
-            const { stdout: createOutput } = await execAsync(template.command, { cwd: args.path });
+            // Create the project directory first
+            const projectPath = path.join(args.path, args.name);
+            await fs.mkdir(projectPath, { recursive: true });
 
-            // Install dependencies
+            const typescript = args.typescript !== false;
+            const template = this.getProjectTemplate(args.type, args.name, typescript);
+
+            // Execute project creation command in the project directory
+            const { stdout: createOutput } = await execAsync(template.command, {
+                cwd: projectPath
+            });
+
+            // Install dependencies directly in the project directory
             if (template.dependencies.length > 0) {
-                const installCmd = `cd ${args.name} && npm install ${template.dependencies.join(' ')}`;
-                await execAsync(installCmd, { cwd: args.path });
+                const installCmd = `npm install ${template.dependencies.join(' ')}`;
+                await execAsync(installCmd, { cwd: projectPath });
             }
 
             // Install dev dependencies
             if (template.devDependencies.length > 0) {
-                const installDevCmd = `cd ${args.name} && npm install --save-dev ${template.devDependencies.join(' ')}`;
-                await execAsync(installDevCmd, { cwd: args.path });
+                const installDevCmd = `npm install --save-dev ${template.devDependencies.join(' ')}`;
+                await execAsync(installDevCmd, { cwd: projectPath });
             }
 
             // Setup TypeScript configuration if needed
@@ -637,9 +660,9 @@ ${features.includes('docker') ? '8. Docker configuration guidance' : ''}`
                     exclude: ["node_modules", "dist"]
                 };
 
-                await fs.mkdir(path.join(args.path, args.name, 'src'), { recursive: true });
+                await fs.mkdir(path.join(projectPath, 'src'), { recursive: true });
                 await fs.writeFile(
-                    path.join(args.path, args.name, 'tsconfig.json'),
+                    path.join(projectPath, 'tsconfig.json'),
                     JSON.stringify(tsConfig, null, 2)
                 );
             }
@@ -647,7 +670,7 @@ ${features.includes('docker') ? '8. Docker configuration guidance' : ''}`
             // Create initial documentation
             const readmeContent = this.generateReadme(args.name, args.type, typescript);
             await fs.writeFile(
-                path.join(args.path, args.name, 'README.md'),
+                path.join(projectPath, 'README.md'),
                 readmeContent
             );
 
@@ -669,6 +692,8 @@ ${features.includes('docker') ? '8. Docker configuration guidance' : ''}`
             );
         }
     }
+
+
 
     private generateReadme(name: string, type: string, typescript: boolean): string {
         return `# ${name}

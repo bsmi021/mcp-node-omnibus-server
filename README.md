@@ -1,5 +1,7 @@
 # Node Omnibus MCP Server
 
+[![smithery badge](https://smithery.ai/badge/@bsmi021/mcp-node-omnibus-server)](https://smithery.ai/server/@bsmi021/mcp-node-omnibus-server)
+
 A comprehensive Model Context Protocol (MCP) server that provides advanced Node.js development tooling and automation capabilities.
 
 ## Features
@@ -45,6 +47,14 @@ A comprehensive Model Context Protocol (MCP) server that provides advanced Node.
 - Error debugging assistance
 
 ## Installation
+
+### Installing via Smithery
+
+To install Node Omnibus Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@bsmi021/mcp-node-omnibus-server):
+
+```bash
+npx -y @smithery/cli install @bsmi021/mcp-node-omnibus-server --client claude
+```
 
 1. Clone the repository
 2. Install dependencies:
